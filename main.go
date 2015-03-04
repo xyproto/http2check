@@ -40,7 +40,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Println()
 		fmt.Println(version_string)
-		fmt.Println("Check if webservers are using HTTP/2")
+		fmt.Println("Check if a given webserver is using HTTP/2")
 		fmt.Println()
 		fmt.Println("Syntax: http2check [URI]")
 		fmt.Println()
