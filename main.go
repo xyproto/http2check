@@ -12,8 +12,9 @@ import (
 	"github.com/xyproto/textgui"
 )
 
-const version_string = "http2check 0.2"
+const version_string = "http2check 0.3"
 
+// Message with an optional additional string that will appear in paranthesis
 func msg(o *textgui.TextOutput, subject, msg string, extra ...string) {
 	if len(extra) == 0 {
 		o.Println(fmt.Sprintf("%s%s%s %s", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg))
@@ -93,9 +94,10 @@ func main() {
 	}
 	res, err := rt.RoundTrip(req)
 	if err != nil {
+		// Better looking error messages
 		errorMessage := strings.TrimSpace(err.Error())
 		if errorMessage == "bad protocol:" {
-			msg(o, "protocol", o.DarkRed("Not HTTP/2"), errorMessage)
+			msg(o, "protocol", o.DarkRed("Not HTTP/2"))
 		} else if errorMessage == "http2: unsupported scheme and no Fallback" {
 			msg(o, "HTTP/2", o.DarkRed("Not supported"))
 		} else if strings.HasPrefix(errorMessage, "dial tcp") && strings.HasSuffix(errorMessage, ": connection refused") {
