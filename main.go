@@ -12,10 +12,14 @@ import (
 	"github.com/xyproto/textgui"
 )
 
-const version_string = "http2check 0.1"
+const version_string = "http2check 0.2"
 
-func msg(o *textgui.TextOutput, subject, msg string) {
-	o.Println(fmt.Sprintf("%s%s%s %s", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg))
+func msg(o *textgui.TextOutput, subject, msg string, extra ...string) {
+	if len(extra) == 0 {
+		o.Println(fmt.Sprintf("%s%s%s %s", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg))
+	} else {
+		o.Println(fmt.Sprintf("%s%s%s %s (%s)", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg, extra[0]))
+	}
 }
 
 func main() {
@@ -91,9 +95,13 @@ func main() {
 	if err != nil {
 		errorMessage := strings.TrimSpace(err.Error())
 		if errorMessage == "bad protocol:" {
-			msg(o, "protocol", o.DarkRed("Not HTTP/2"))
+			msg(o, "protocol", o.DarkRed("Not HTTP/2"), errorMessage)
 		} else if errorMessage == "http2: unsupported scheme and no Fallback" {
-			msg(o, "scheme", o.DarkRed("Unsupported, without fallback"))
+			msg(o, "HTTP/2", o.DarkRed("Not supported"))
+		} else if strings.HasPrefix(errorMessage, "dial tcp") && strings.HasSuffix(errorMessage, ": connection refused") {
+			msg(o, "host", o.DarkRed("Down"), errorMessage)
+		} else if strings.HasPrefix(errorMessage, "tls: oversized record received with length ") {
+			msg(o, "protocol", o.DarkRed("No HTTPS support"), errorMessage)
 		} else {
 			o.ErrExit(errorMessage)
 		}
