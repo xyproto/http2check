@@ -11,10 +11,13 @@ Installation
 Example usage
 -------------
 
-* `http2check twitter.com`
-> GET https://twitter.com
-> [protocol] HTTP/2.0
-> [status] 200 OK
+`http2check twitter.com`
+
+Output:
+
+ GET https://twitter.com
+ [protocol] HTTP/2.0
+ [status] 200 OK
 
 General information
 -------------------
