@@ -15,9 +15,11 @@ Example usage
 
 Output:
 
- GET https://twitter.com
- [protocol] HTTP/2.0
- [status] 200 OK
+~~~
+GET https://twitter.com
+[protocol] HTTP/2.0
+[status] 200 OK
+~~~
 
 General information
 -------------------
