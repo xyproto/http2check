@@ -9,13 +9,13 @@ import (
 	"strings"
 
 	"github.com/bradfitz/http2"
-	"github.com/xyproto/textgui"
+	"github.com/xyproto/term"
 )
 
-const version_string = "http2check 0.3"
+const version_string = "http2check 0.4"
 
 // Message with an optional additional string that will appear in paranthesis
-func msg(o *textgui.TextOutput, subject, msg string, extra ...string) {
+func msg(o *term.TextOutput, subject, msg string, extra ...string) {
 	if len(extra) == 0 {
 		o.Println(fmt.Sprintf("%s%s%s %s", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg))
 	} else {
@@ -24,7 +24,7 @@ func msg(o *textgui.TextOutput, subject, msg string, extra ...string) {
 }
 
 func main() {
-	o := textgui.NewTextOutput(true, true)
+	o := term.NewTextOutput(true, true)
 
 	// Silence the http2 logging
 	devnull, err := os.OpenFile("/dev/null", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
@@ -60,7 +60,7 @@ func main() {
 
 	// Use the flags and arguments
 
-	o = textgui.NewTextOutput(true, !*quiet)
+	o = term.NewTextOutput(true, !*quiet)
 
 	args := flag.Args()
 
