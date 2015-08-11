@@ -24,7 +24,7 @@ GET https://twitter.com
 General information
 -------------------
 
-* Version: 0.4
+* Version: 0.5
 * License: MIT
 * Alexander F Rødseth
 

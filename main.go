@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -12,7 +13,7 @@ import (
 	"github.com/xyproto/term"
 )
 
-const version_string = "http2check 0.4"
+const version_string = "http2check 0.5"
 
 // Message with an optional additional string that will appear in paranthesis
 func msg(o *term.TextOutput, subject, msg string, extra ...string) {
@@ -21,6 +22,20 @@ func msg(o *term.TextOutput, subject, msg string, extra ...string) {
 	} else {
 		o.Println(fmt.Sprintf("%s%s%s %s (%s)", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg, extra[0]))
 	}
+}
+
+// We have an IPv6 addr where the URL needs to be changed from https://something to [something]:443
+func fixIPv6(url string) string {
+	port := ""
+	if strings.HasPrefix(url, "http://") {
+		url = url[7:]
+		port = ":80"
+	}
+	if strings.HasPrefix(url, "https://") {
+		url = url[8:]
+		port = ":443"
+	}
+	return "[" + url + "]" + port
 }
 
 func main() {
@@ -58,19 +73,19 @@ func main() {
 
 	flag.Parse()
 
-	// Use the flags and arguments
-
+	// Create a new terminal output struct (for colored text)
 	o = term.NewTextOutput(true, !*quiet)
 
-	args := flag.Args()
-
+	// Check if the version flag was given
 	if *version {
 		o.Println(version_string)
 		os.Exit(0)
 	}
 
-	// Default URL
+	// Retrieve the commandline arguments
+	args := flag.Args()
 
+	// The default URL
 	url := "https://http2.golang.org"
 	if len(args) > 0 {
 		url = args[0]
@@ -79,39 +94,78 @@ func main() {
 		url = "https://" + url
 	}
 
-	// Display the URL that is to be checked
+	// Check if it's likely to be IPv6.
+	// TODO: Find a better way to detect this
+	if strings.Contains(url, "::") {
+		url = fixIPv6(url)
+	}
 
+	/*
+	 * Enumerate the interfaces and strip strings like "%eth0",
+	 * because they are parsed incorrectly by Go, with errors like:
+	 * parse [ff02::1%!e(MISSING)th0]:443: invalid URL escape "%!e(MISSING)t"
+	 */
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		o.ErrExit(err.Error())
+	}
+	for _, iface := range interfaces {
+		// TODO: Find the final % and check if it is followed by an iface, instead
+		iName := "%" + iface.Name
+		if strings.Contains(url, iName) {
+			o.Println(o.DarkGray("ignoring \"" + iName + "\""))
+			url = strings.Replace(url, iName, "", -1)
+			break
+		}
+	}
+
+	// Display the URL that is about be checked
 	o.Println(o.DarkGray("GET") + " " + o.LightCyan(url))
 
 	// GET over HTTP/2
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		o.ErrExit(err.Error())
+		if strings.HasSuffix(err.Error(), "hexadecimal escape in host") {
+			url = fixIPv6(url)
+		} else {
+			o.ErrExit(err.Error())
+		}
 	}
 	rt := &http2.Transport{
 		InsecureTLSDial: true,
 	}
 	res, err := rt.RoundTrip(req)
 	if err != nil {
-		// Better looking error messages
-		errorMessage := strings.TrimSpace(err.Error())
-		if errorMessage == "bad protocol:" {
-			msg(o, "protocol", o.DarkRed("Not HTTP/2"))
-		} else if errorMessage == "http2: unsupported scheme and no Fallback" {
-			msg(o, "HTTP/2", o.DarkRed("Not supported"))
-		} else if strings.HasPrefix(errorMessage, "dial tcp") && strings.HasSuffix(errorMessage, ": connection refused") {
-			msg(o, "host", o.DarkRed("Down"), errorMessage)
-		} else if strings.HasPrefix(errorMessage, "tls: oversized record received with length ") {
-			msg(o, "protocol", o.DarkRed("No HTTPS support"), errorMessage)
-		} else {
-			o.ErrExit(errorMessage)
+		// Pick up typical problems with IPv6 addresses
+		// TODO: Find an exact way to do this instead
+		if strings.Contains(err.Error(), "too many colons") {
+			url = fixIPv6(url)
+			o.Println(o.LightYellow("IPv6") + " " + o.DarkGray(url))
+			req, err = http.NewRequest("GET", url, nil)
+			if err != nil {
+				o.ErrExit(err.Error())
+			}
+			res, err = rt.RoundTrip(req)
 		}
-		os.Exit(1)
+		if err != nil {
+			// Better looking error messages
+			errorMessage := strings.TrimSpace(err.Error())
+			if errorMessage == "bad protocol:" {
+				msg(o, "protocol", o.DarkRed("Not HTTP/2"))
+			} else if errorMessage == "http2: unsupported scheme and no Fallback" {
+				msg(o, "HTTP/2", o.DarkRed("Not supported"))
+			} else if strings.HasPrefix(errorMessage, "dial tcp") && strings.HasSuffix(errorMessage, ": connection refused") {
+				msg(o, "host", o.DarkRed("Down"), errorMessage)
+			} else if strings.HasPrefix(errorMessage, "tls: oversized record received with length ") {
+				msg(o, "protocol", o.DarkRed("No HTTPS support"), errorMessage)
+			} else {
+				o.ErrExit(errorMessage)
+			}
+			os.Exit(1)
+		}
 	}
 
-	// Final output
-
+	// The final output
 	msg(o, "protocol", o.White(res.Proto))
 	msg(o, "status", o.White(res.Status))
 }
