@@ -14,7 +14,7 @@ import (
 	"github.com/xyproto/term"
 )
 
-const version_string = "http2check 0.5"
+const version_string = "http2check 0.6"
 
 // Message with an optional additional string that will appear in paranthesis
 func msg(o *term.TextOutput, subject, msg string, extra ...string) {
