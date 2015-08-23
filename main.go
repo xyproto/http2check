@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"runtime"
 
 	"github.com/bradfitz/http2"
 	"github.com/xyproto/term"
@@ -42,7 +43,7 @@ func main() {
 	o := term.NewTextOutput(true, true)
 
 	// Silence the http2 logging
-	devnull, err := os.OpenFile("/dev/null", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		o.ErrExit("Could not open /dev/null for writing")
 	}
@@ -74,7 +75,7 @@ func main() {
 	flag.Parse()
 
 	// Create a new terminal output struct (for colored text)
-	o = term.NewTextOutput(true, !*quiet)
+	o = term.NewTextOutput(runtime.GOOS != "windows" , !*quiet)
 
 	// Check if the version flag was given
 	if *version {
