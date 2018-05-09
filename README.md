@@ -5,13 +5,14 @@ Utility for checking if a given server supports HTTP/2.
 Installation
 ------------
 
-* `go get github.com/xyproto/http2check`
-* Add `$GOPATH/bin` to the PATH (optional)
+Optionally add `$GOPATH/bin` to the PATH, then:
+
+    go get -u github.com/xyproto/http2check
 
 Example usage
 -------------
 
-`http2check twitter.com`
+    http2check twitter.com
 
 Output:
 
@@ -27,4 +28,3 @@ General information
 * Version: 0.6
 * License: MIT
 * Alexander F Rødseth
-

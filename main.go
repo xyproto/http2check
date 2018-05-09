@@ -1,17 +1,18 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"runtime"
+	"strings"
 
-	"github.com/bradfitz/http2"
 	"github.com/xyproto/term"
+	"golang.org/x/net/http2"
 )
 
 const version_string = "http2check 0.6"
@@ -28,11 +29,11 @@ func msg(o *term.TextOutput, subject, msg string, extra ...string) {
 // We have an IPv6 addr where the URL needs to be changed from https://something to [something]:443
 func fixIPv6(url string) string {
 	port := ""
-	if strings.HasPrefix(url, "http://") {
+	if strings.HasPrefix(url, "http://") && !strings.HasSuffix(url, ":80") {
 		url = url[7:]
 		port = ":80"
 	}
-	if strings.HasPrefix(url, "https://") {
+	if strings.HasPrefix(url, "https://") && !strings.HasSuffix(url, ":443") {
 		url = url[8:]
 		port = ":443"
 	}
@@ -75,7 +76,7 @@ func main() {
 	flag.Parse()
 
 	// Create a new terminal output struct (for colored text)
-	o = term.NewTextOutput(runtime.GOOS != "windows" , !*quiet)
+	o = term.NewTextOutput(runtime.GOOS != "windows", !*quiet)
 
 	// Check if the version flag was given
 	if *version {
@@ -91,14 +92,18 @@ func main() {
 	if len(args) > 0 {
 		url = args[0]
 	}
+	ipaddr := net.ParseIP(url)
+	if ipaddr.DefaultMask() == nil {
+		// Not a valid IPv4 address
+		// Check if it's likely to be IPv6.
+
+		// TODO: Find a better way to detect this
+		if strings.Contains(url, "::") {
+			url = fixIPv6(url)
+		}
+	}
 	if !strings.Contains(url, "://") {
 		url = "https://" + url
-	}
-
-	// Check if it's likely to be IPv6.
-	// TODO: Find a better way to detect this
-	if strings.Contains(url, "::") {
-		url = fixIPv6(url)
 	}
 
 	/*
@@ -132,9 +137,8 @@ func main() {
 			o.ErrExit(err.Error())
 		}
 	}
-	rt := &http2.Transport{
-		InsecureTLSDial: true,
-	}
+	tlsconf := &tls.Config{InsecureSkipVerify: true}
+	rt := &http2.Transport{TLSClientConfig: tlsconf}
 	res, err := rt.RoundTrip(req)
 	if err != nil {
 		// Pick up typical problems with IPv6 addresses
@@ -159,6 +163,10 @@ func main() {
 				msg(o, "host", o.DarkRed("Down"), errorMessage)
 			} else if strings.HasPrefix(errorMessage, "tls: oversized record received with length ") {
 				msg(o, "protocol", o.DarkRed("No HTTPS support"), errorMessage)
+			} else if strings.HasPrefix(errorMessage, "http2: unexpected ALPN protocol") {
+				msg(o, "protocol", o.DarkRed("Not HTTP/2"))
+			} else if strings.HasPrefix(errorMessage, "dial tcp: lookup") {
+				msg(o, "host", o.DarkRed("Down"), "host not found")
 			} else {
 				o.ErrExit(errorMessage)
 			}
