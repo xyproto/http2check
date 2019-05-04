@@ -22,6 +22,11 @@ GET https://twitter.com
 [status] 200 OK
 ~~~
 
+Limitations
+-----------
+
+* IPv6 addresses are not supported.
+
 General information
 -------------------
 
