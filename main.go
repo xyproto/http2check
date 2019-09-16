@@ -11,14 +11,14 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/xyproto/term"
+	"github.com/xyproto/textoutput"
 	"golang.org/x/net/http2"
 )
 
 const version_string = "http2check 0.6"
 
 // Message with an optional additional string that will appear in paranthesis
-func msg(o *term.TextOutput, subject, msg string, extra ...string) {
+func msg(o *textoutput.TextOutput, subject, msg string, extra ...string) {
 	if len(extra) == 0 {
 		o.Println(fmt.Sprintf("%s%s%s %s", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg))
 	} else {
@@ -41,7 +41,7 @@ func fixIPv6(url string) string {
 }
 
 func main() {
-	o := term.NewTextOutput(true, true)
+	o := textoutput.NewTextOutput(true, true)
 
 	// Silence the http2 logging
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
@@ -75,8 +75,8 @@ func main() {
 
 	flag.Parse()
 
-	// Create a new terminal output struct (for colored text)
-	o = term.NewTextOutput(runtime.GOOS != "windows", !*quiet)
+	// Create a new TextOutput struct (for colored text)
+	o = textoutput.NewTextOutput(runtime.GOOS != "windows", !*quiet)
 
 	// Check if the version flag was given
 	if *version {
