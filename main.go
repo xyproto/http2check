@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/http2"
 )
 
-const version_string = "http2check 0.6"
+const versionString = "http2check 0.6"
 
 // Message with an optional additional string that will appear in paranthesis
 func msg(o *textoutput.TextOutput, subject, msg string, extra ...string) {
@@ -53,22 +53,22 @@ func main() {
 
 	// Flags
 
-	version_help := "Show application name and version"
-	quiet_help := "Don't write to standard out"
+	versionHelp := "Show application name and version"
+	quietHelp := "Don't write to standard out"
 
-	version := flag.Bool("version", false, version_help)
-	quiet := flag.Bool("q", false, quiet_help)
+	version := flag.Bool("version", false, versionHelp)
+	quiet := flag.Bool("q", false, quietHelp)
 
 	flag.Usage = func() {
 		fmt.Println()
-		fmt.Println(version_string)
+		fmt.Println(versionString)
 		fmt.Println("Check if a given webserver is using HTTP/2")
 		fmt.Println()
 		fmt.Println("Syntax: http2check [URI]")
 		fmt.Println()
 		fmt.Println("Possible flags:")
-		fmt.Println("    --version                  " + version_help)
-		fmt.Println("    --q                        " + quiet_help)
+		fmt.Println("    --version                  " + versionHelp)
+		fmt.Println("    --q                        " + quietHelp)
 		fmt.Println("    --help                     This text")
 		fmt.Println()
 	}
@@ -80,7 +80,7 @@ func main() {
 
 	// Check if the version flag was given
 	if *version {
-		o.Println(version_string)
+		o.Println(versionString)
 		os.Exit(0)
 	}
 
