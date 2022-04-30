@@ -5,9 +5,9 @@ Utility for checking if a given server supports HTTP/2.
 Installation
 ------------
 
-Optionally add `$GOPATH/bin` to the PATH, then:
+For Go 1.17 or later:
 
-    go get -u github.com/xyproto/http2check
+    go install github.com/xyproto/http2check@latest
 
 Example usage
 -------------
@@ -30,6 +30,6 @@ Limitations
 General information
 -------------------
 
-* Version: 0.6
-* License: MIT
-* Alexander F Rødseth
+* Version: 0.7.0
+* License: BSD-3
+* Alexander F. Rødseth
