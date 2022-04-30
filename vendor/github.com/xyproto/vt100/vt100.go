@@ -1,13 +1,16 @@
 package vt100
 
 import (
+	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-// From http://www.termsys.demon.co.uk/vtansi.htm. Not the full spec, but a good subset:
+// From http://www.termsys.demon.co.uk/vtansi.htm. Not the full spec, but a good subset.
+// Update: Not even a good subset. Some of the codes are wrong!
 const specVT100 = `
 
 ANSI/VT100 Terminal Control Escape Sequences
@@ -56,11 +59,11 @@ Reset Device		<ESC>c
 
     Reset all terminal settings to default.
 
-Enable Line Wrap	<ESC>[7h
+Enable Line Wrap	<ESC>[?7h
 
     Text wraps to next line if longer than the length of the display area.
 
-Disable Line Wrap	<ESC>[7l
+Disable Line Wrap	<ESC>[?7l
 
     Disables line wrapping.
 
@@ -488,4 +491,50 @@ func Close() {
 
 func EchoOff() {
 	fmt.Print("\033[12h")
+}
+
+func SetLineWrap(enable bool) {
+	if enable {
+		Do("Enable Line Wrap")
+	} else {
+		Do("Disable Line Wrap")
+	}
+}
+
+func ShowCursor(enable bool) {
+	// Thanks https://rosettacode.org/wiki/Terminal_control/Hiding_the_cursor#Escape_code
+	if enable {
+		fmt.Print("\033[?25h")
+	} else {
+		fmt.Print("\033[?25l")
+	}
+}
+
+// GetBackgroundColor prints a code to the terminal emulator,
+// reads the results and tries to interpret it as the RGB background color.
+// Returns three float64 values, and possibly an error value.
+func GetBackgroundColor(tty *TTY) (float64, float64, float64, error) {
+	if err := tty.WriteString("\033]11;?\a"); err != nil {
+		return 0, 0, 0, err
+	}
+	result, err := tty.ReadString()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if pos := strings.Index(result, "rgb:"); pos != -1 {
+		rgb := result[pos+4:]
+		if strings.Count(rgb, "/") == 2 {
+			parts := strings.SplitN(rgb, "/", 3)
+			if len(parts) == 3 {
+				r := new(big.Int)
+				r.SetString(parts[0], 16)
+				g := new(big.Int)
+				g.SetString(parts[1], 16)
+				b := new(big.Int)
+				b.SetString(parts[2], 16)
+				return float64(r.Int64() / 65535.0), float64(g.Int64() / 65535.0), float64(b.Int64() / 65535.0), nil
+			}
+		}
+	}
+	return 0, 0, 0, errors.New("could not read rgb value from terminal emulator")
 }

@@ -1,6 +1,11 @@
+//go:build !windows
+// +build !windows
+
 package vt100
 
 import (
+	"errors"
+	"io/ioutil"
 	"strconv"
 	"time"
 	"unicode"
@@ -94,7 +99,7 @@ func asciiAndKeyCode(tty *TTY) (ascii, keyCode int, err error) {
 		}
 	} else if numRead == 1 {
 		ascii = int(bytes[0])
-	} else {
+		//} else {
 		// TWo characters read??
 	}
 	return
@@ -133,7 +138,7 @@ func asciiAndKeyCodeNoJavascript(tty *TTY) (ascii, keyCode int, err error) {
 		}
 	} else if numRead == 1 {
 		ascii = int(bytes[0])
-	} else {
+		//} else {
 		// Two characters read??
 	}
 	return
@@ -216,18 +221,19 @@ func KeyOnce() int {
 	return ascii
 }
 
-// Wait for Esc, Enter or Space to be pressed
+// Wait for Return, Esc, Space or q to be pressed
 func WaitForKey() {
 	// Get a new TTY and start reading keypresses in a loop
 	r, err := NewTTY()
-	defer r.Close()
 	if err != nil {
+		r.Close()
 		panic(err)
 	}
 	//r.SetTimeout(10 * time.Millisecond)
 	for {
 		switch r.Key() {
-		case 27, 13, 32:
+		case 13, 27, 32, 113:
+			r.Close()
 			return
 		}
 	}
@@ -317,4 +323,25 @@ func (tty *TTY) Rune() rune {
 		return []rune(string(bytes))[0]
 	}
 	return rune(0)
+}
+
+// Write a string to the TTY
+func (tty *TTY) WriteString(s string) error {
+	n, err := tty.t.Write([]byte(s))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return errors.New("no bytes written to the TTY")
+	}
+	return nil
+}
+
+// Read a string from the TTY
+func (tty *TTY) ReadString() (string, error) {
+	b, err := ioutil.ReadAll(tty.t)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
