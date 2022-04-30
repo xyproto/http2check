@@ -88,7 +88,7 @@ func main() {
 	args := flag.Args()
 
 	// The default URL
-	url := "https://http2.golang.org"
+	url := "https://twitter.com"
 	if len(args) > 0 {
 		url = args[0]
 	}
