@@ -15,7 +15,7 @@ import (
 	"golang.org/x/net/http2"
 )
 
-const versionString = "http2check 0.6"
+const versionString = "http2check 0.7.1"
 
 // Message with an optional additional string that will appear in paranthesis
 func msg(o *textoutput.TextOutput, subject, msg string, extra ...string) {
