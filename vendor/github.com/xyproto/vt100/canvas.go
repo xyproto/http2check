@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"unicode"
 )
 
 type ColorRune struct {
@@ -31,15 +30,20 @@ type Canvas struct {
 	runewise      bool
 }
 
+// canvasCopy is a Canvas without the mutex
+type canvasCopy struct {
+	chars         []ColorRune
+	oldchars      []ColorRune
+	w             uint
+	h             uint
+	cursorVisible bool
+	lineWrap      bool
+	runewise      bool
+}
+
 func NewCanvas() *Canvas {
-	var err error
 	c := &Canvas{}
-	c.w, c.h, err = TermSize()
-	if err != nil {
-		// Use 80x25 if the size can't be detected
-		c.w = 80
-		c.h = 25
-	}
+	c.w, c.h = MustTermSize()
 	c.chars = make([]ColorRune, c.w*c.h)
 	for i := 0; i < len(c.chars); i++ {
 		c.chars[i].fg = Default
@@ -55,42 +59,33 @@ func NewCanvas() *Canvas {
 }
 
 // Copy creates a new Canvas struct that is a copy of this one.
-// The mutex is kept as a pointer to the original.
+// The mutex is initialized as a new mutex.
 func (c *Canvas) Copy() Canvas {
-	var c2 Canvas
 	c.mut.RLock()
-	c2.w = c.w
-	c2.h = c.h
-	l := len(c.chars)
-	chars2 := make([]ColorRune, l)
-	for i, cr := range c.chars {
-		cr2 := ColorRune{
-			fg:    cr.fg,
-			bg:    cr.bg,
-			r:     cr.r,
-			drawn: cr.drawn,
-		}
-		chars2[i] = cr2
+	defer c.mut.RUnlock()
+
+	cc := canvasCopy{
+		chars:         make([]ColorRune, len(c.chars)),
+		oldchars:      make([]ColorRune, len(c.oldchars)),
+		w:             c.w,
+		h:             c.h,
+		cursorVisible: c.cursorVisible,
+		lineWrap:      c.lineWrap,
+		runewise:      c.runewise,
 	}
-	c.mut.RUnlock()
-	c2.chars = chars2
-	oldchars2 := make([]ColorRune, l)
-	c.mut.RLock()
-	for i, cr := range c.oldchars {
-		cr2 := ColorRune{
-			fg:    cr.fg,
-			bg:    cr.bg,
-			r:     cr.r,
-			drawn: cr.drawn,
-		}
-		oldchars2[i] = cr2
+	copy(cc.chars, c.chars)
+	copy(cc.oldchars, c.oldchars)
+
+	return Canvas{
+		chars:         cc.chars,
+		oldchars:      cc.oldchars,
+		w:             cc.w,
+		h:             cc.h,
+		cursorVisible: cc.cursorVisible,
+		lineWrap:      cc.lineWrap,
+		runewise:      cc.runewise,
+		mut:           &sync.RWMutex{},
 	}
-	c2.cursorVisible = c.cursorVisible
-	c2.lineWrap = c.lineWrap
-	c.mut.RUnlock()
-	c2.oldchars = oldchars2
-	c2.mut = c.mut
-	return c2
 }
 
 // Change the background color for each character
@@ -116,8 +111,8 @@ func (c *Canvas) Fill(fg AttributeColor) {
 // String returns only the characters, as a long string with a newline after each row
 func (c *Canvas) String() string {
 	var sb strings.Builder
+	c.mut.RLock()
 	for y := uint(0); y < c.h; y++ {
-		c.mut.RLock()
 		for x := uint(0); x < c.w; x++ {
 			cr := &((*c).chars[y*c.w+x])
 			if cr.r == rune(0) {
@@ -127,8 +122,8 @@ func (c *Canvas) String() string {
 			}
 		}
 		sb.WriteRune('\n')
-		c.mut.RUnlock()
 	}
+	c.mut.RUnlock()
 	return sb.String()
 }
 
@@ -137,8 +132,8 @@ func (c *Canvas) String() string {
 func (c *Canvas) PlotAll() {
 	w := c.w
 	h := c.h
+	c.mut.Lock()
 	for y := uint(0); y < h; y++ {
-		c.mut.Lock()
 		for x := int(w - 1); x >= 0; x-- {
 			cr := &((*c).chars[y*w+uint(x)])
 			r := cr.r
@@ -149,8 +144,8 @@ func (c *Canvas) PlotAll() {
 			SetXY(uint(x), y)
 			fmt.Print(cr.fg.Combine(cr.bg).String() + string(r) + NoColor())
 		}
-		c.mut.Unlock()
 	}
+	c.mut.Unlock()
 }
 
 // Return the size of the current canvas
@@ -208,24 +203,24 @@ func Clear() {
 // Clear canvas
 func (c *Canvas) Clear() {
 	c.mut.Lock()
+	defer c.mut.Unlock()
 	for _, cr := range c.chars {
 		cr.r = rune(0)
 		cr.drawn = false
 	}
-	c.mut.Unlock()
 }
 
 func (c *Canvas) SetLineWrap(enable bool) {
 	c.mut.Lock()
+	defer c.mut.Unlock()
 	SetLineWrap(enable)
-	c.mut.Unlock()
 }
 
 func (c *Canvas) SetShowCursor(enable bool) {
 	c.mut.Lock()
+	defer c.mut.Unlock()
 	c.cursorVisible = enable
 	ShowCursor(enable)
-	c.mut.Unlock()
 }
 
 func (c *Canvas) W() uint {
@@ -250,12 +245,22 @@ func (c *Canvas) ShowCursor() {
 
 func (c *Canvas) SetRunewise(b bool) {
 	c.mut.Lock()
+	defer c.mut.Unlock()
 	c.runewise = b
-	c.mut.Unlock()
 }
 
-// Draw the entire canvas
-func (c *Canvas) Draw() {
+// DrawAndSetCursor draws the entire canvas and then places the cursor at x,y
+func (c *Canvas) DrawAndSetCursor(x, y uint) {
+	c.Draw()
+	// Reposition the cursor
+	SetXY(x, y)
+}
+
+// HideCursorAndDraw will hide the cursor and then draw the entire canvas
+func (c *Canvas) HideCursorAndDraw() {
+
+	c.cursorVisible = false
+	c.SetShowCursor(false)
 
 	var (
 		lastfg = Default // AttributeColor
@@ -274,86 +279,225 @@ func (c *Canvas) Draw() {
 	// and it will appear like the first line(s) are lost!
 
 	c.mut.RLock()
+
+	if len((*c).chars) == 0 {
+		c.mut.RUnlock()
+		return
+	}
+
 	firstRun := len(c.oldchars) == 0
 	skipAll := !firstRun // true by default, except for the first run
-	size := uint(c.w * c.h)
 
-	for index := uint(0); index < (size - 1); index++ {
-		cr = (*c).chars[index]
-		if !firstRun {
+	size := c.w*c.h - 1
+	sb.Grow(int(size))
+
+	if !firstRun {
+		for index := uint(0); index < size; index++ {
+			cr = (*c).chars[index]
 			oldcr = (*c).oldchars[index]
 			if cr.fg.Equal(lastfg) && cr.fg.Equal(oldcr.fg) && cr.bg.Equal(lastbg) && cr.bg.Equal(oldcr.bg) && cr.r == oldcr.r {
 				// One is not skippable, can not skip all
 				skipAll = false
 			}
+			// Only output a color code if it's different from the last character, or it's the first one
+			if (index == 0) || !lastfg.Equal(cr.fg) || !lastbg.Equal(cr.bg) {
+				// Write to the string builder
+				sb.WriteString(cr.fg.Combine(cr.bg).String())
+			}
+			// Write the character
+			if cr.r != 0 {
+				sb.WriteRune(cr.r)
+			} else {
+				sb.WriteRune(' ')
+			}
+			lastfg = cr.fg
+			lastbg = cr.bg
 		}
-
-		// Only output a color code if it's different from the last character, or it's the first one
-		if (index == 0) || !lastfg.Equal(cr.fg) || !lastbg.Equal(cr.bg) {
-			// Write to the string builder
-			sb.WriteString(cr.fg.Combine(cr.bg).String())
+	} else {
+		for index := uint(0); index < size; index++ {
+			cr = (*c).chars[index]
+			// Only output a color code if it's different from the last character, or it's the first one
+			if (index == 0) || !lastfg.Equal(cr.fg) || !lastbg.Equal(cr.bg) {
+				// Write to the string builder
+				sb.WriteString(cr.fg.Combine(cr.bg).String())
+			}
+			// Write the character
+			if cr.r != 0 {
+				sb.WriteRune(cr.r)
+			} else {
+				sb.WriteRune(' ')
+			}
+			lastfg = cr.fg
+			lastbg = cr.bg
 		}
-
-		// Write the character
-		if unicode.IsPrint(cr.r) {
-			sb.WriteRune(cr.r)
-		} else {
-			sb.WriteRune(' ')
-		}
-
-		lastfg = cr.fg
-		lastbg = cr.bg
 	}
+
 	c.mut.RUnlock()
 
 	// The screenfull so far is correct (sb.String())
 
-	// Output the combined string, also disable the color codes
-	if !skipAll {
+	if skipAll {
+		return
+	}
 
-		// Hide the cursor, temporarily, if it's visible
-		reEnableCursor := false
-		if c.cursorVisible {
-			c.SetShowCursor(false)
-			reEnableCursor = true
-		}
+	// Enable line wrap, temporarily, if it's disabled
+	reDisableLineWrap := false
+	if !c.lineWrap {
+		c.SetLineWrap(true)
+		reDisableLineWrap = true
+	}
 
-		// Enable line wrap, temporarily, if it's disabled
-		reDisableLineWrap := false
-		if !c.lineWrap {
-			c.SetLineWrap(true)
-			reDisableLineWrap = true
-		}
+	// Draw each and every line, or push one large string to screen?
+	if c.runewise {
 
-		// Draw each and every line, or push one large string to screen?
-		if c.runewise {
+		Clear()
+		c.PlotAll()
 
-			Clear()
-			c.PlotAll()
-
-		} else {
-			c.mut.Lock()
-			SetXY(0, 0)
-			os.Stdout.Write([]byte(sb.String()))
-			c.mut.Unlock()
-		}
-
-		// Restore the cursor, if it was temporarily hidden
-		if reEnableCursor {
-			c.SetShowCursor(true)
-		}
-
-		// Restore the line wrap, if it was temporarily enabled
-		if reDisableLineWrap {
-			c.SetLineWrap(false)
-		}
-
-		// Save the current state to oldchars
+	} else {
 		c.mut.Lock()
-		c.oldchars = make([]ColorRune, len(c.chars))
-		copy(c.oldchars, c.chars)
+		SetXY(0, 0)
+		os.Stdout.Write([]byte(sb.String()))
 		c.mut.Unlock()
 	}
+
+	// Restore the line wrap, if it was temporarily enabled
+	if reDisableLineWrap {
+		c.SetLineWrap(false)
+	}
+
+	// Save the current state to oldchars
+	c.mut.Lock()
+	if lc := len(c.chars); len(c.oldchars) != lc {
+		c.oldchars = make([]ColorRune, lc)
+	}
+	copy(c.oldchars, c.chars)
+	c.mut.Unlock()
+}
+
+// Draw the entire canvas
+func (c *Canvas) Draw() {
+	var (
+		lastfg = Default // AttributeColor
+		lastbg = Default // AttributeColor
+		cr     ColorRune
+		oldcr  ColorRune
+		sb     strings.Builder
+	)
+
+	cr.fg = Default
+	cr.bg = Default
+	oldcr.fg = Default
+	oldcr.bg = Default
+
+	// NOTE: If too many runes are written to the screen, the contents will scroll up,
+	// and it will appear like the first line(s) are lost!
+
+	c.mut.RLock()
+
+	if len((*c).chars) == 0 {
+		c.mut.RUnlock()
+		return
+	}
+
+	firstRun := len(c.oldchars) == 0
+	skipAll := !firstRun // true by default, except for the first run
+
+	size := c.w*c.h - 1
+	sb.Grow(int(size))
+
+	if !firstRun {
+		for index := uint(0); index < size; index++ {
+			cr = (*c).chars[index]
+			oldcr = (*c).oldchars[index]
+			if cr.fg.Equal(lastfg) && cr.fg.Equal(oldcr.fg) && cr.bg.Equal(lastbg) && cr.bg.Equal(oldcr.bg) && cr.r == oldcr.r {
+				// One is not skippable, can not skip all
+				skipAll = false
+			}
+			// Only output a color code if it's different from the last character, or it's the first one
+			if (index == 0) || !lastfg.Equal(cr.fg) || !lastbg.Equal(cr.bg) {
+				// Write to the string builder
+				sb.WriteString(cr.fg.Combine(cr.bg).String())
+			}
+			// Write the character
+			if cr.r != 0 {
+				sb.WriteRune(cr.r)
+			} else {
+				sb.WriteRune(' ')
+			}
+			lastfg = cr.fg
+			lastbg = cr.bg
+		}
+	} else {
+		for index := uint(0); index < size; index++ {
+			cr = (*c).chars[index]
+			// Only output a color code if it's different from the last character, or it's the first one
+			if (index == 0) || !lastfg.Equal(cr.fg) || !lastbg.Equal(cr.bg) {
+				// Write to the string builder
+				sb.WriteString(cr.fg.Combine(cr.bg).String())
+			}
+			// Write the character
+			if cr.r != 0 {
+				sb.WriteRune(cr.r)
+			} else {
+				sb.WriteRune(' ')
+			}
+			lastfg = cr.fg
+			lastbg = cr.bg
+		}
+	}
+
+	c.mut.RUnlock()
+
+	// The screenfull so far is correct (sb.String())
+
+	if skipAll {
+		return
+	}
+
+	// Output the combined string, also disable the color codes
+
+	// Hide the cursor, temporarily, if it's visible
+	reEnableCursor := false
+	if c.cursorVisible {
+		c.SetShowCursor(false)
+		reEnableCursor = true
+	}
+
+	// Enable line wrap, temporarily, if it's disabled
+	reDisableLineWrap := false
+	if !c.lineWrap {
+		c.SetLineWrap(true)
+		reDisableLineWrap = true
+	}
+
+	// Draw each and every line, or push one large string to screen?
+	if c.runewise {
+
+		Clear()
+		c.PlotAll()
+
+	} else {
+		c.mut.Lock()
+		SetXY(0, 0)
+		os.Stdout.Write([]byte(sb.String()))
+		c.mut.Unlock()
+	}
+
+	// Restore the cursor, if it was temporarily hidden
+	if reEnableCursor {
+		c.SetShowCursor(true)
+	}
+
+	// Restore the line wrap, if it was temporarily enabled
+	if reDisableLineWrap {
+		c.SetLineWrap(false)
+	}
+
+	// Save the current state to oldchars
+	c.mut.Lock()
+	c.oldchars = make([]ColorRune, len(c.chars))
+	copy(c.oldchars, c.chars)
+	c.mut.Unlock()
 }
 
 func (c *Canvas) Redraw() {
@@ -365,12 +509,21 @@ func (c *Canvas) Redraw() {
 	c.Draw()
 }
 
+func (c *Canvas) HideCursorAndRedraw() {
+	c.mut.Lock()
+	for _, cr := range c.chars {
+		cr.drawn = false
+	}
+	c.mut.Unlock()
+	c.HideCursorAndDraw()
+}
+
 // At returns the rune at the given coordinates, or an error if out of bounds
 func (c *Canvas) At(x, y uint) (rune, error) {
-	index := y*c.w + x
 	c.mut.RLock()
 	defer c.mut.RUnlock()
 	chars := (*c).chars
+	index := y*c.w + x
 	if index < uint(0) || index >= uint(len(chars)) {
 		return rune(0), errors.New("out of bounds")
 	}
@@ -439,37 +592,88 @@ func (c *Canvas) WriteRune(x, y uint, fg, bg AttributeColor, r rune) {
 		return
 	}
 	index := y*c.w + x
-
 	c.mut.Lock()
+	defer c.mut.Unlock()
 	chars := (*c).chars
 	chars[index].r = r
 	chars[index].fg = fg
 	chars[index].bg = bg.Background()
 	chars[index].drawn = false
-	c.mut.Unlock()
 }
 
 // WriteRuneB will write a colored rune to the canvas
-// This is the same as WriteRuneB, but bg.Background() has already been called on
-// the background attribute.
 // The x and y must be within range (x < c.w and y < c.h)
 func (c *Canvas) WriteRuneB(x, y uint, fg, bgb AttributeColor, r rune) {
 	index := y*c.w + x
+	c.mut.Lock()
+	defer c.mut.Unlock()
+	(*c).chars[index] = ColorRune{fg, bgb, r, false}
+}
 
+// WriteRuneBNoLock will write a colored rune to the canvas
+// The x and y must be within range (x < c.w and y < c.h)
+// The canvas mutex is not locked
+func (c *Canvas) WriteRuneBNoLock(x, y uint, fg, bgb AttributeColor, r rune) {
+	(*c).chars[y*c.w+x] = ColorRune{fg, bgb, r, false}
+}
+
+// WriteBackground will write a background color to the canvas
+// The x and y must be within range (x < c.w and y < c.h)
+func (c *Canvas) WriteBackground(x, y uint, bg AttributeColor) {
+	index := y*c.w + x
+	c.mut.Lock()
+	defer c.mut.Unlock()
+	(*c).chars[index].bg = bg
+	(*c).chars[index].drawn = false
+}
+
+// WriteBackgroundAddRuneIfEmpty will write a background color to the canvas
+// The x and y must be within range (x < c.w and y < c.h)
+func (c *Canvas) WriteBackgroundAddRuneIfEmpty(x, y uint, bg AttributeColor, r rune) {
+	index := y*c.w + x
+	c.mut.Lock()
+	defer c.mut.Unlock()
+	(*c).chars[index].bg = bg
+	if (*c).chars[index].r == 0 {
+		(*c).chars[index].r = r
+	}
+	(*c).chars[index].drawn = false
+}
+
+// WriteBackgroundNoLock will write a background color to the canvas
+// The x and y must be within range (x < c.w and y < c.h)
+// The canvas mutex is not locked
+func (c *Canvas) WriteBackgroundNoLock(x, y uint, bg AttributeColor) {
+	index := y*c.w + x
+	(*c).chars[index].bg = bg
+	(*c).chars[index].drawn = false
+}
+
+func (c *Canvas) Lock() {
+	c.mut.Lock()
+}
+
+func (c *Canvas) Unlock() {
+	c.mut.Unlock()
+}
+
+// WriteRunesB will write repeated colored runes to the canvas.
+// This is the same as WriteRuneB, but bg.Background() has already been called on
+// the background attribute.
+// The x and y must be within range (x < c.w and y < c.h). x + count must be within range too.
+func (c *Canvas) WriteRunesB(x, y uint, fg, bgb AttributeColor, r rune, count uint) {
+	startIndex := y*c.w + x
+	afterLastIndex := startIndex + count
 	c.mut.Lock()
 	chars := (*c).chars
-	chars[index].r = r
-	chars[index].fg = fg
-	chars[index].bg = bgb
-	chars[index].drawn = false
+	for i := startIndex; i < afterLastIndex; i++ {
+		chars[i] = ColorRune{fg, bgb, r, false}
+	}
 	c.mut.Unlock()
 }
 
 func (c *Canvas) Resize() {
-	w, h, err := TermSize()
-	if err != nil {
-		return
-	}
+	w, h := MustTermSize()
 	c.mut.Lock()
 	if (w != c.w) || (h != c.h) {
 		// Resize to the new size
@@ -484,11 +688,7 @@ func (c *Canvas) Resize() {
 // Check if the canvas was resized, and adjust values accordingly.
 // Returns a new canvas, or nil.
 func (c *Canvas) Resized() *Canvas {
-	w, h, err := TermSize()
-	if err != nil {
-		fmt.Println(err)
-		return nil
-	}
+	w, h := MustTermSize()
 	if (w != c.w) || (h != c.h) {
 		// The terminal was resized!
 		oldc := c
