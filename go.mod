@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/xyproto/textoutput v1.17.2
-	golang.org/x/net v0.43.0
+	golang.org/x/net v0.47.0
 )
 
 require (
@@ -16,6 +16,6 @@ require (
 	github.com/xyproto/burnfont v1.2.3 // indirect
 	github.com/xyproto/env/v2 v2.5.3 // indirect
 	github.com/xyproto/vt100 v1.20.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 )
