@@ -30,6 +30,6 @@ Limitations
 General information
 -------------------
 
-* Version: 0.7.1
+* Version: 0.7.2
 * License: BSD-3
 * Alexander F. Rødseth
