@@ -11,18 +11,18 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/xyproto/textoutput"
+	"github.com/xyproto/vt"
 	"golang.org/x/net/http2"
 )
 
-const versionString = "http2check 0.7.1"
+const versionString = "http2check 0.7.2"
 
 // Message with an optional additional string that will appear in paranthesis
-func msg(o *textoutput.TextOutput, subject, msg string, extra ...string) {
+func msg(o *vt.TextOutput, subject, msg string, extra ...string) {
 	if len(extra) == 0 {
-		o.Println(fmt.Sprintf("%s%s%s %s", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg))
+		o.Println(fmt.Sprintf("%s%s%s %s", vt.DarkGray.Get("["), vt.LightBlue.Get(subject), vt.DarkGray.Get("]"), msg))
 	} else {
-		o.Println(fmt.Sprintf("%s%s%s %s (%s)", o.DarkGray("["), o.LightBlue(subject), o.DarkGray("]"), msg, extra[0]))
+		o.Println(fmt.Sprintf("%s%s%s %s (%s)", vt.DarkGray.Get("["), vt.LightBlue.Get(subject), vt.DarkGray.Get("]"), msg, extra[0]))
 	}
 }
 
@@ -41,7 +41,7 @@ func fixIPv6(url string) string {
 }
 
 func main() {
-	o := textoutput.NewTextOutput(true, true)
+	o := vt.NewTextOutput(true, true)
 
 	// Silence the http2 logging
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
@@ -76,7 +76,7 @@ func main() {
 	flag.Parse()
 
 	// Create a new TextOutput struct (for colored text)
-	o = textoutput.NewTextOutput(runtime.GOOS != "windows", !*quiet)
+	o = vt.NewTextOutput(runtime.GOOS != "windows", !*quiet)
 
 	// Check if the version flag was given
 	if *version {
@@ -119,14 +119,14 @@ func main() {
 		// TODO: Find the final % and check if it is followed by an iface, instead
 		iName := "%" + iface.Name
 		if strings.Contains(url, iName) {
-			o.Println(o.DarkGray("ignoring \"" + iName + "\""))
+			o.Println(vt.DarkGray.Get("ignoring \"" + iName + "\""))
 			url = strings.Replace(url, iName, "", -1)
 			break
 		}
 	}
 
 	// Display the URL that is about be checked
-	o.Println(o.DarkGray("GET") + " " + o.LightCyan(url))
+	o.Println(vt.DarkGray.Get("GET") + " " + vt.LightCyan.Get(url))
 
 	// GET over HTTP/2
 	req, err := http.NewRequest("GET", url, nil)
@@ -145,7 +145,7 @@ func main() {
 		// TODO: Find an exact way to do this instead
 		if strings.Contains(err.Error(), "too many colons") {
 			url = fixIPv6(url)
-			o.Println(o.LightYellow("IPv6") + " " + o.DarkGray(url))
+			o.Println(vt.LightYellow.Get("IPv6") + " " + vt.DarkGray.Get(url))
 			req, err = http.NewRequest("GET", url, nil)
 			if err != nil {
 				o.ErrExit(err.Error())
@@ -156,17 +156,17 @@ func main() {
 			// Better looking error messages
 			errorMessage := strings.TrimSpace(err.Error())
 			if errorMessage == "bad protocol:" {
-				msg(o, "protocol", o.DarkRed("Not HTTP/2"))
+				msg(o, "protocol", vt.Red.Get("Not HTTP/2"))
 			} else if errorMessage == "http2: unsupported scheme and no Fallback" {
-				msg(o, "HTTP/2", o.DarkRed("Not supported"))
+				msg(o, "HTTP/2", vt.Red.Get("Not supported"))
 			} else if strings.HasPrefix(errorMessage, "dial tcp") && strings.HasSuffix(errorMessage, ": connection refused") {
-				msg(o, "host", o.DarkRed("Down"), errorMessage)
+				msg(o, "host", vt.Red.Get("Down"), errorMessage)
 			} else if strings.HasPrefix(errorMessage, "tls: oversized record received with length ") {
-				msg(o, "protocol", o.DarkRed("No HTTPS support"), errorMessage)
+				msg(o, "protocol", vt.Red.Get("No HTTPS support"), errorMessage)
 			} else if strings.HasPrefix(errorMessage, "http2: unexpected ALPN protocol") {
-				msg(o, "protocol", o.DarkRed("Not HTTP/2"))
+				msg(o, "protocol", vt.Red.Get("Not HTTP/2"))
 			} else if strings.HasPrefix(errorMessage, "dial tcp: lookup") {
-				msg(o, "host", o.DarkRed("Down"), "host not found")
+				msg(o, "host", vt.Red.Get("Down"), "host not found")
 			} else {
 				o.ErrExit(errorMessage)
 			}
@@ -175,6 +175,6 @@ func main() {
 	}
 
 	// The final output
-	msg(o, "protocol", o.White(res.Proto))
-	msg(o, "status", o.White(res.Status))
+	msg(o, "protocol", vt.White.Get(res.Proto))
+	msg(o, "status", vt.White.Get(res.Status))
 }
